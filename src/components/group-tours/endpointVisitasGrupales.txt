@@ -1,0 +1,202 @@
+using System.Security.Claims;
+
+using Application.VisitaGrupal.UseCases.Comands.CancelarVisitaGuiada;
+using Application.VisitaGrupal.UseCases.Comands.CrearVisitaGuiada;
+using Application.VisitaGrupal.UseCases.Comands.NewFolder;
+using Application.VisitaGrupal.UseCases.Queries.ConsultarDisponibilidadTurnosVisitaGuiada;
+using Application.VisitaGrupal.UseCases.Queries.GetReservationById;
+using Application.VisitaGrupal.UseCases.Queries.GetReservationsById;
+using Application.VisitaGrupal.UseCases.Queries.GetTematicaVisitaGrupal;
+
+using Core.Application;
+
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Controllers;
+
+[ApiController]
+[Route("api/v1/[controller]")]
+public class VisitasGuiadasController(ICommandQueryBus commandQueryBus) : ControllerBase
+{
+    private readonly ICommandQueryBus _commandQueryBus = commandQueryBus;
+
+
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [HttpPost]
+    public async Task<IActionResult> Create(
+        CrearVisitaGuiadaCommand command)
+    {
+        if (command is null)
+            return BadRequest();
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        command.UsuarioVisitanteId = usuarioId;
+        var id = await _commandQueryBus.Send(command);
+
+        return Created($"api/[Controller]/{id}", new { Id = id });
+
+    }
+    [HttpGet("DisponibilidadTurnosVisitasGuiadas")]
+    public async Task<IActionResult> DisponibilidadTurnosVisitasGuiadas(
+        DateTime fechaDesde,
+        DateTime fechaHasta,
+        uint pageIndex = 1,
+        uint pageSize = 10)
+    {
+        var visitas = await _commandQueryBus.Send(
+            new ConsultarDisponibilidadTurnosDiaQuery(fechaDesde, fechaHasta)
+            {
+
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            });
+
+        return Ok(visitas);
+    }
+    [HttpGet("TematicasDisponibles")]
+    public async Task<IActionResult> TematicasDisponibles()
+    {
+        var tematicas = await _commandQueryBus.Send(
+            new GetAllTematicasQuery());
+        return Ok(tematicas);
+    }
+
+
+
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [HttpGet("reservations")]
+    public async Task<IActionResult> GetReservations()
+    {
+        var usuarioId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrEmpty(usuarioId))
+            return Unauthorized();
+
+        var visitas = await _commandQueryBus.Send(
+            new GetReservationsByUserIdQuery
+            {
+                UsuarioVisitanteId = usuarioId
+            });
+
+        return Ok(visitas);
+    }
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetReservationById(int id)
+    {
+        if (id <= 0)
+            return BadRequest();
+        var entity= await _commandQueryBus.Send(new GetReservationByIdQuery { ReservationId = id });
+        return Ok(entity);
+    }
+    
+
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [HttpPut("{id}/cancel")]
+    public async Task<IActionResult> Cancel(int id)
+    {
+        if (id <= 0)
+            return BadRequest();
+
+        await _commandQueryBus.Send(
+            new CancelarVisitaGuiadaCommand
+            {
+                ReservationId = id
+            });
+
+        return NoContent();
+    }
+
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [HttpPost("{id}/reprogram")]
+    public async Task<IActionResult> Reprogram(
+        int id,
+        ReprogramarCommand command)
+    {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        command.UsuarioVisitanteId = usuarioId;
+        command.VisitaReprogramadaId = id;
+
+        var nuevaVisitaId = await _commandQueryBus.Send(command);
+
+        return Created($"api/v1/VisitasGuiadas/{nuevaVisitaId}",new { Id = nuevaVisitaId });
+    }
+
+     
+
+    /*
+
+[HttpGet]
+    public async Task<IActionResult> GetAll(
+        uint pageIndex = 1,
+        uint pageSize = 10)
+    {
+        var visitas = await _commandQueryBus.Send(
+            new GetAllVisitasGuiadasQuery
+            {
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            });
+
+        return Ok(visitas);
+    }
+  
+
+ [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        await _commandQueryBus.Send(
+            new DeleteVisitaGuiadaCommand
+            {
+                Id = id
+            });
+
+        return NoContent();
+    }
+ 
+ 
+ 
+ 
+ */
+}
+
+
+
+
+
+{
+  "id": 11,
+  "usuarioVisitanteId": "5e91e6af-b72c-4cfd-942c-f70017a3602d",
+  "institucion": "nombre",
+  "emailInstitucion": "danilujan57@gmail.com",
+  "telefonoInstitucion": "3541231796",
+  "provinciaInstitucion": "14",
+  "departamentoInstitucion": "14091",
+  "ciudadInstitucion": "14091070",
+  "nivelCurso": "Primario",
+  "anioCurso": 6,
+  "descripcionDiscapacidad": "no",
+  "motivoVisita": "no",
+  "observaciones": "no",
+  "tematicasDto": [
+    {
+      "id": 1,
+      "nombre": "Pueblos Originarios",
+      "descripcion": "Recorrido centrado en las culturas originarias, sus costumbres, herramientas y formas de vida."
+    },
+    {
+      "id": 2,
+      "nombre": "Arqueologia Regional",
+      "descripcion": "Explora hallazgos arqueologicos y piezas historicas de la region."
+    },
+    {
+      "id": 4,
+      "nombre": "Biodiversidad y Ambiente",
+      "descripcion": "Presenta la diversidad biologica, ecosistemas y problematica ambiental actual."
+    }
+  ],
+  "fechaInicio": "2026-06-19T11:00:00",
+  "fechaFin": "2026-06-19T12:00:00",
+  "cantidadPersonas": 28,
+  "estadoConfirmacion": "PendienteConfirmar"
+}
